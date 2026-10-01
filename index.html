@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f1e9">
+  <title>多采多姿頭皮管理－土城店</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="brand-card">
+      <p class="eyebrow">LINE MINI APP 測試版</p>
+      <h1 id="appName">多采多姿頭皮管理－土城店</h1>
+      <p class="subtext">先確認 LINE 身份能否正常取得，再接正式預約 API。</p>
+    </header>
+
+    <section class="status-card" aria-live="polite">
+      <div class="status-row">
+        <span class="status-dot" id="statusDot"></span>
+        <div>
+          <p class="status-title" id="statusTitle">正在初始化 LINE MINI App…</p>
+          <p class="status-text" id="statusText">請稍候</p>
+        </div>
+      </div>
+      <button id="loginButton" class="primary-button hidden" type="button">使用 LINE 登入</button>
+      <button id="retryButton" class="secondary-button hidden" type="button">重新檢查</button>
+    </section>
+
+    <section id="identityCard" class="identity-card hidden">
+      <p class="eyebrow">身份確認成功</p>
+      <h2 id="welcomeText">您好</h2>
+      <div class="identity-grid">
+        <div class="kv"><span>LIFF Client</span><strong id="inClientValue">-</strong></div>
+        <div class="kv"><span>登入狀態</span><strong id="loggedInValue">-</strong></div>
+        <div class="kv"><span>ID Token</span><strong id="tokenValue">-</strong></div>
+        <div class="kv"><span>LINE User ID</span><strong id="userIdValue" class="mono">-</strong></div>
+      </div>
+      <div class="actions">
+        <button class="primary-button" id="bookingDemoButton" type="button">進入預約測試畫面</button>
+      </div>
+    </section>
+
+    <section id="bookingDemo" class="booking-card hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">前端樣式預覽</p>
+          <h2>我要預約</h2>
+        </div>
+        <span class="pill">老師由系統安排</span>
+      </div>
+
+      <div class="field-block">
+        <label for="dateInput">選擇日期</label>
+        <input id="dateInput" type="date">
+      </div>
+
+      <div class="field-block">
+        <span class="label-like">選擇課程</span>
+        <div class="course-list" id="courseList">
+          <button type="button" class="course-option" data-course="頭皮洗淨" data-duration="45">
+            <span><strong>頭皮洗淨</strong><small>頭皮管理</small></span><em>45 分鐘</em>
+          </button>
+          <button type="button" class="course-option" data-course="頭皮深呼吸" data-duration="75">
+            <span><strong>頭皮深呼吸</strong><small>頭皮管理</small></span><em>75 分鐘</em>
+          </button>
+          <button type="button" class="course-option" data-course="肩頸放鬆" data-duration="30">
+            <span><strong>肩頸放鬆</strong><small>舒壓</small></span><em>30 分鐘</em>
+          </button>
+        </div>
+      </div>
+
+      <div class="field-block">
+        <span class="label-like">可預約時間（展示）</span>
+        <div class="slot-grid" id="slotGrid">
+          <button type="button" class="slot">10:00</button>
+          <button type="button" class="slot">10:30</button>
+          <button type="button" class="slot">13:00</button>
+          <button type="button" class="slot">14:30</button>
+          <button type="button" class="slot">16:00</button>
+          <button type="button" class="slot">18:00</button>
+        </div>
+      </div>
+
+      <div class="notice">此版本不會真的建立預約；目前只用來確認 GitHub Pages + LIFF 身份是否正常。</div>
+    </section>
+
+    <details class="debug-card">
+      <summary>技術診斷資訊</summary>
+      <pre id="debugOutput">尚未初始化</pre>
+    </details>
+  </main>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
