@@ -34,12 +34,12 @@
       let slowTimer=null;
       const controller = new AbortController();
       const TIMEOUTS={
-      'mini.bootstrap':20000,
-      'mini.courses':20000,
-      'mini.slots':30000,
-      'mini.createBooking':35000,
-      'mini.myBookings':30000,
-      'mini.cancelBooking':30000
+      'mini.bootstrap':30000,
+      'mini.courses':30000,
+      'mini.slots':45000,
+      'mini.createBooking':45000,
+      'mini.myBookings':40000,
+      'mini.cancelBooking':35000
     };
       const timeoutMs=TIMEOUTS[action]||25000;
       const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -60,9 +60,16 @@
         if (!res.ok) throw new Error(body.error || `API 連線失敗（HTTP ${res.status}）`);
         if (!body.ok) throw new Error(body.error || '操作失敗');
         body.clientElapsedMs=Date.now()-startedAt;
+        const d = {};
+        try { Object.assign(d, JSON.parse($('debugOutput').textContent || '{}')); } catch (_) {}
+        d.lastApi = { action, requestId:body.requestId || '', clientElapsedMs:body.clientElapsedMs, workerElapsedMs:body.workerElapsedMs || null, miniElapsedMs:body.miniElapsedMs || null };
+        debug(d);
         return body;
       } catch (err) {
-        if (err && err.name === 'AbortError') throw new Error('連線逾時，請稍後再試');
+        if (err && err.name === 'AbortError') {
+          const label = action === 'mini.slots' ? '讀取可預約時段' : action === 'mini.myBookings' ? '讀取我的預約' : action === 'mini.createBooking' ? '建立預約' : '連線';
+          throw new Error(label + '逾時，請稍後再試');
+        }
         throw err;
       } finally { clearTimeout(timer); if(slowTimer) clearTimeout(slowTimer); }
     })();
