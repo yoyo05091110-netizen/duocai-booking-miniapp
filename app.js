@@ -1,7 +1,8 @@
 (() => {
   'use strict';
   const cfg = window.APP_CONFIG || {};
-  const state = { idToken:'', displayName:'', boot:null, customer:null, date:'', course:null, time:'' };
+  const state = { idToken:'', displayName:'', boot:null, customer:null, date:'', course:null, time:'', mineLoadedAt:0, mineBookings:null, mineLoading:false, courseReqSeq:0, slotReqSeq:0 };
+  const inflight = new Map();
   const $ = id => document.getElementById(id);
   const esc = v => String(v == null ? '' : v).replace(/[&<>'"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
 
@@ -26,25 +27,32 @@
   async function api(action, payload={}) {
     if (!apiConfigured()) throw new Error('API 尚未設定。請先完成 Cloudflare Worker，再更新 config.js 的 API_URL。');
     if (!state.idToken) throw new Error('LINE 身份尚未取得');
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20000);
-    try {
-      const res = await fetch(cfg.API_URL, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ action, idToken:state.idToken, payload }),
-        signal:controller.signal
-      });
-      const text = await res.text();
-      let body;
-      try { body = JSON.parse(text || '{}'); } catch (_) { throw new Error('API 回應格式錯誤'); }
-      if (!res.ok) throw new Error(body.error || `API 連線失敗（HTTP ${res.status}）`);
-      if (!body.ok) throw new Error(body.error || '操作失敗');
-      return body;
-    } catch (err) {
-      if (err && err.name === 'AbortError') throw new Error('連線逾時，請稍後再試');
-      throw err;
-    } finally { clearTimeout(timer); }
+    const key = action + '|' + JSON.stringify(payload || {});
+    if (inflight.has(key)) return inflight.get(key);
+    const promise = (async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      try {
+        const res = await fetch(cfg.API_URL, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ action, idToken:state.idToken, payload }),
+          signal:controller.signal
+        });
+        const text = await res.text();
+        let body;
+        try { body = JSON.parse(text || '{}'); } catch (_) { throw new Error('API 回應格式錯誤'); }
+        if (!res.ok) throw new Error(body.error || `API 連線失敗（HTTP ${res.status}）`);
+        if (!body.ok) throw new Error(body.error || '操作失敗');
+        return body;
+      } catch (err) {
+        if (err && err.name === 'AbortError') throw new Error('連線逾時，請稍後再試');
+        throw err;
+      } finally { clearTimeout(timer); }
+    })();
+    inflight.set(key, promise);
+    try { return await promise; }
+    finally { if (inflight.get(key) === promise) inflight.delete(key); }
   }
 
   function decodeJwtPayload(token) {
@@ -116,6 +124,16 @@
     $('phoneInput').value = c.phone || '';
   }
 
+  function formatDateDisplay(value) {
+    const m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${Number(m[1])}年${Number(m[2])}月${Number(m[3])}日` : '選擇日期';
+  }
+
+  function syncDateDisplay() {
+    const el = $('dateDisplay');
+    if (el) el.textContent = formatDateDisplay($('dateInput').value);
+  }
+
   function setupDate(boot) {
     const input = $('dateInput');
     input.min = boot.today;
@@ -125,20 +143,28 @@
     input.max = `${yyyy}-${mm}-${dd}`;
     input.value = boot.today;
     state.date = boot.today;
+    syncDateDisplay();
   }
 
   async function loadCourses() {
     clearMsg();
+    syncDateDisplay();
+    const seq = ++state.courseReqSeq;
     state.date = $('dateInput').value;
     state.course = null; state.time = '';
+    state.slotReqSeq++;
     $('slotCard').classList.add('hidden'); $('contactCard').classList.add('hidden'); $('confirmCard').classList.add('hidden');
     if (!state.date) return;
     $('courseCard').classList.remove('hidden');
     $('courseList').innerHTML = '<div class="loading">讀取課程中…</div>';
     try {
       const r = await api('mini.courses', { date:state.date });
+      if (seq !== state.courseReqSeq) return;
       renderCourses(r.courses || []);
-    } catch (err) { $('courseCard').classList.add('hidden'); msg(err.message,'error'); }
+    } catch (err) {
+      if (seq !== state.courseReqSeq) return;
+      $('courseCard').classList.add('hidden'); msg(err.message,'error');
+    }
   }
 
   function renderCourses(list) {
@@ -156,14 +182,20 @@
   }
 
   async function selectCourse(course) {
+    clearMsg();
+    const seq = ++state.slotReqSeq;
     state.course = course; state.time = '';
     document.querySelectorAll('.course-option').forEach(b => b.classList.toggle('selected', b.dataset.course === course.courseId));
     $('contactCard').classList.add('hidden'); $('confirmCard').classList.add('hidden');
     $('slotCard').classList.remove('hidden'); $('slotList').innerHTML='<div class="loading">讀取時段中…</div>';
     try {
       const r = await api('mini.slots', { date:state.date, courseId:course.courseId });
+      if (seq !== state.slotReqSeq) return;
       renderSlots(r.slots || []);
-    } catch (err) { msg(err.message,'error'); }
+    } catch (err) {
+      if (seq !== state.slotReqSeq) return;
+      msg(err.message,'error');
+    }
   }
 
   function renderSlots(list) {
@@ -178,6 +210,7 @@
   }
 
   function selectTime(time) {
+    clearMsg();
     state.time = time;
     document.querySelectorAll('.slot').forEach(b => b.classList.toggle('selected', b.dataset.time === time));
     $('contactCard').classList.remove('hidden'); $('confirmCard').classList.remove('hidden');
@@ -203,36 +236,58 @@
       if (!state.course || !state.time) throw new Error('請先選擇課程與時間');
       const p=profilePayload(); btn.disabled=true; btn.textContent='建立預約中…';
       const r=await api('mini.createBooking', { date:state.date, courseId:state.course.courseId, startTime:state.time, name:p.name, phone:p.phone, note:$('noteInput').value.trim() });
-      state.customer=r.customer || state.customer; renderProfile();
+      state.customer=r.customer || state.customer; state.mineLoadedAt=0; state.mineBookings=null; renderProfile();
       const memberNo=(r.customer&&r.customer.customerId)?('｜會員編號 '+r.customer.customerId):''; msg(`預約成功${memberNo}｜${r.date} ${r.startTime}`,'ok');
       state.course=null; state.time=''; $('slotCard').classList.add('hidden'); $('contactCard').classList.add('hidden'); $('confirmCard').classList.add('hidden'); $('noteInput').value='';
       await loadCourses();
       window.scrollTo({top:0,behavior:'smooth'});
-    } catch(err){ msg(err.message,'error'); }
+    } catch(err){
+      msg(err.message,'error');
+      if (/時段.*(已被預約|關閉)|重新選擇時間/.test(String(err.message||'')) && state.course) {
+        state.time=''; $('contactCard').classList.add('hidden'); $('confirmCard').classList.add('hidden');
+        await selectCourse(state.course);
+      }
+    }
     finally { btn.disabled=false; btn.textContent='確認送出預約'; }
   }
 
-  async function loadMine() {
+  function renderMineList(list) {
+    const el=$('mineList');
+    if (!list.length) { el.className='empty'; el.textContent='目前沒有預約紀錄'; return; }
+    el.className=''; el.innerHTML='';
+    list.forEach(b => {
+      const item=document.createElement('div'); item.className='booking-item';
+      item.innerHTML=`<div class="booking-top"><div class="booking-date">${esc(b.date)} ${esc(b.startTime)}</div><span class="status">${esc(b.status)}</span></div><div class="booking-course">${esc(b.courseName)}</div>`;
+      if (b.canCancel) {
+        const cancel=document.createElement('button'); cancel.type='button'; cancel.className='cancel-btn'; cancel.textContent='取消此預約';
+        cancel.addEventListener('click', () => cancelBooking(b.bookingId)); item.appendChild(cancel);
+      }
+      el.appendChild(item);
+    });
+  }
+
+  async function loadMine(force=false) {
+    if (state.mineLoading) return;
+    if (!force && state.mineBookings && Date.now()-state.mineLoadedAt < 30000) {
+      renderMineList(state.mineBookings);
+      return;
+    }
+    state.mineLoading=true;
+    $('refreshMineBtn').disabled=true;
     const el=$('mineList'); el.className='loading'; el.textContent='載入中…';
     try {
-      const r=await api('mini.myBookings'); const list=r.bookings || [];
-      if (!list.length) { el.className='empty'; el.textContent='目前沒有預約紀錄'; return; }
-      el.className=''; el.innerHTML='';
-      list.forEach(b => {
-        const item=document.createElement('div'); item.className='booking-item';
-        item.innerHTML=`<div class="booking-top"><div class="booking-date">${esc(b.date)} ${esc(b.startTime)}</div><span class="status">${esc(b.status)}</span></div><div class="booking-course">${esc(b.courseName)}</div>`;
-        if (b.canCancel) {
-          const cancel=document.createElement('button'); cancel.type='button'; cancel.className='cancel-btn'; cancel.textContent='取消此預約';
-          cancel.addEventListener('click', () => cancelBooking(b.bookingId)); item.appendChild(cancel);
-        }
-        el.appendChild(item);
-      });
+      const r=await api('mini.myBookings');
+      state.customer=r.customer || state.customer;
+      state.mineBookings=r.bookings || [];
+      state.mineLoadedAt=Date.now();
+      renderMineList(state.mineBookings);
     } catch(err){ el.className='notice error'; el.textContent=err.message; }
+    finally { state.mineLoading=false; $('refreshMineBtn').disabled=false; }
   }
 
   async function cancelBooking(id) {
     if (!window.confirm('確定要取消這筆預約嗎？')) return;
-    try { await api('mini.cancelBooking',{bookingId:id}); msg('預約已取消','ok'); await loadMine(); }
+    try { await api('mini.cancelBooking',{bookingId:id}); state.mineLoadedAt=0; state.mineBookings=null; msg('預約已取消','ok'); await loadMine(true); }
     catch(err){ msg(err.message,'error'); }
   }
 
@@ -240,13 +295,13 @@
     const booking=tab==='book';
     $('tabBook').classList.toggle('active',booking); $('tabMine').classList.toggle('active',!booking);
     $('bookPage').classList.toggle('hidden',!booking); $('minePage').classList.toggle('hidden',booking);
-    if (!booking) loadMine();
+    if (!booking) loadMine(false);
   }
 
-  $('dateInput').addEventListener('change', loadCourses);
+  $('dateInput').addEventListener('change', () => { syncDateDisplay(); loadCourses(); });
   $('bookBtn').addEventListener('click', createBooking);
   $('tabBook').addEventListener('click', () => switchTab('book'));
   $('tabMine').addEventListener('click', () => switchTab('mine'));
-  $('refreshMineBtn').addEventListener('click', loadMine);
+  $('refreshMineBtn').addEventListener('click', () => loadMine(true));
   bootstrap();
 })();
