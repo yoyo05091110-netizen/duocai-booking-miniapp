@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f4f1ea">
   <title>多采多姿頭皮管理｜線上預約</title>
-  <link rel="stylesheet" href="./style.css?v=21">
+  <link rel="stylesheet" href="./style.css?v=2.2">
 </head>
 <body>
   <main class="app-shell">
@@ -37,7 +37,7 @@
       <section class="card">
         <div class="step">STEP 1</div>
         <h2>選擇日期</h2>
-        <input id="dateInput" type="date">
+        <div class="date-control"><input id="dateInput" type="date"></div>
         <p class="hint">只會顯示當天實際可提供服務的課程。</p>
       </section>
 
@@ -63,7 +63,7 @@
         <input id="phoneInput" type="tel" inputmode="numeric" autocomplete="tel" placeholder="09xxxxxxxx">
         <label for="noteInput">備註 <span class="muted">（選填）</span></label>
         <textarea id="noteInput" placeholder="例如：第一次來店、需特別留意事項"></textarea>
-        <button id="saveProfileBtn" class="secondary-btn" type="button">儲存會員資料</button>
+        <p class="member-note">首次預約送出時會自動建立會員編號，之後預約、購課與消課都會沿用同一個會員資料。</p>
       </section>
 
       <section id="confirmCard" class="card hidden">
@@ -94,7 +94,7 @@
   </main>
 
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <script src="./config.js?v=21"></script>
-  <script src="./app.js?v=21"></script>
+  <script src="./config.js?v=2.2"></script>
+  <script src="./app.js?v=2.2"></script>
 </body>
 </html>

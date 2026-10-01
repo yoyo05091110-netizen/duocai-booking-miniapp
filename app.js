@@ -1,9 +1,7 @@
 (() => {
   'use strict';
   const cfg = window.APP_CONFIG || {};
-  const state = { idToken:'', displayName:'', boot:null, customer:null, date:'', course:null, time:'', courseSeq:0, slotSeq:0 };
-  const inflight = new Map();
-  let dateTimer = null;
+  const state = { idToken:'', displayName:'', boot:null, customer:null, date:'', course:null, time:'' };
   const $ = id => document.getElementById(id);
   const esc = v => String(v == null ? '' : v).replace(/[&<>'"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
 
@@ -25,40 +23,28 @@
   function debug(data){ $('debugOutput').textContent = JSON.stringify(data, null, 2); }
   function apiConfigured(){ return cfg.API_URL && !cfg.API_URL.includes('YOUR-WORKER'); }
 
-  function apiKey(action, payload) {
-    return action + '|' + JSON.stringify(payload || {});
-  }
-
   async function api(action, payload={}) {
     if (!apiConfigured()) throw new Error('API 尚未設定。請先完成 Cloudflare Worker，再更新 config.js 的 API_URL。');
     if (!state.idToken) throw new Error('LINE 身份尚未取得');
-    const key = apiKey(action, payload);
-    if (inflight.has(key)) return inflight.get(key);
-
-    const task = (async () => {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
-      try {
-        const res = await fetch(cfg.API_URL, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ action, idToken:state.idToken, payload }),
-          signal:controller.signal,
-          cache:'no-store'
-        });
-        const text = await res.text();
-        let body;
-        try { body = JSON.parse(text || '{}'); } catch (_) { throw new Error('API 回應格式錯誤'); }
-        if (!res.ok) throw new Error(body.error || `API 連線失敗（HTTP ${res.status}）`);
-        if (!body.ok) throw new Error(body.error || '操作失敗');
-        return body;
-      } catch (err) {
-        if (err && err.name === 'AbortError') throw new Error('連線逾時，請稍後再試');
-        throw err;
-      } finally { clearTimeout(timer); }
-    })();
-    inflight.set(key, task);
-    try { return await task; } finally { if (inflight.get(key) === task) inflight.delete(key); }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+      const res = await fetch(cfg.API_URL, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ action, idToken:state.idToken, payload }),
+        signal:controller.signal
+      });
+      const text = await res.text();
+      let body;
+      try { body = JSON.parse(text || '{}'); } catch (_) { throw new Error('API 回應格式錯誤'); }
+      if (!res.ok) throw new Error(body.error || `API 連線失敗（HTTP ${res.status}）`);
+      if (!body.ok) throw new Error(body.error || '操作失敗');
+      return body;
+    } catch (err) {
+      if (err && err.name === 'AbortError') throw new Error('連線逾時，請稍後再試');
+      throw err;
+    } finally { clearTimeout(timer); }
   }
 
   function decodeJwtPayload(token) {
@@ -125,7 +111,7 @@
     const display = c.name || state.displayName || '顧客';
     $('hello').textContent = '您好，' + display;
     $('avatar').textContent = display.slice(0,1);
-    $('bindingText').textContent = c.bound ? (c.formal ? '正式顧客已綁定' : '預約資料已綁定') : '第一次預約請填寫姓名與手機';
+    $('bindingText').textContent = c.bound && c.customerId ? ('會員編號：' + c.customerId) : '第一次預約請填寫姓名與手機，送出後自動建立會員編號';
     $('nameInput').value = c.name || state.displayName || '';
     $('phoneInput').value = c.phone || '';
   }
@@ -142,7 +128,6 @@
   }
 
   async function loadCourses() {
-    const seq = ++state.courseSeq;
     clearMsg();
     state.date = $('dateInput').value;
     state.course = null; state.time = '';
@@ -151,11 +136,9 @@
     $('courseCard').classList.remove('hidden');
     $('courseList').innerHTML = '<div class="loading">讀取課程中…</div>';
     try {
-      const requestedDate = state.date;
-      const r = await api('mini.courses', { date:requestedDate });
-      if (seq !== state.courseSeq || requestedDate !== state.date) return;
+      const r = await api('mini.courses', { date:state.date });
       renderCourses(r.courses || []);
-    } catch (err) { if (seq === state.courseSeq) { $('courseCard').classList.add('hidden'); msg(err.message,'error'); } }
+    } catch (err) { $('courseCard').classList.add('hidden'); msg(err.message,'error'); }
   }
 
   function renderCourses(list) {
@@ -173,17 +156,14 @@
   }
 
   async function selectCourse(course) {
-    const seq = ++state.slotSeq;
     state.course = course; state.time = '';
     document.querySelectorAll('.course-option').forEach(b => b.classList.toggle('selected', b.dataset.course === course.courseId));
     $('contactCard').classList.add('hidden'); $('confirmCard').classList.add('hidden');
     $('slotCard').classList.remove('hidden'); $('slotList').innerHTML='<div class="loading">讀取時段中…</div>';
     try {
-      const requestedDate = state.date, requestedCourse = course.courseId;
-      const r = await api('mini.slots', { date:requestedDate, courseId:requestedCourse });
-      if (seq !== state.slotSeq || !state.course || state.course.courseId !== requestedCourse || state.date !== requestedDate) return;
+      const r = await api('mini.slots', { date:state.date, courseId:course.courseId });
       renderSlots(r.slots || []);
-    } catch (err) { if (seq === state.slotSeq) msg(err.message,'error'); }
+    } catch (err) { msg(err.message,'error'); }
   }
 
   function renderSlots(list) {
@@ -217,15 +197,6 @@
     $('bookingSummary').innerHTML = `日期：<b>${esc(state.date)}</b><br>課程：<b>${esc(state.course ? state.course.name : '')}</b><br>時間：<b>${esc(state.time)}</b><br>老師：<b>由系統自動安排</b>`;
   }
 
-  async function saveProfile() {
-    try {
-      const btn=$('saveProfileBtn'); btn.disabled=true; btn.textContent='儲存中…';
-      const r=await api('mini.saveProfile', profilePayload());
-      state.customer=r; renderProfile(); msg('會員資料已儲存','ok');
-    } catch(err){ msg(err.message,'error'); }
-    finally { const btn=$('saveProfileBtn'); btn.disabled=false; btn.textContent='儲存會員資料'; }
-  }
-
   async function createBooking() {
     const btn=$('bookBtn');
     try {
@@ -233,7 +204,7 @@
       const p=profilePayload(); btn.disabled=true; btn.textContent='建立預約中…';
       const r=await api('mini.createBooking', { date:state.date, courseId:state.course.courseId, startTime:state.time, name:p.name, phone:p.phone, note:$('noteInput').value.trim() });
       state.customer=r.customer || state.customer; renderProfile();
-      msg(`預約成功｜${r.date} ${r.startTime}`,'ok');
+      const memberNo=(r.customer&&r.customer.customerId)?('｜會員編號 '+r.customer.customerId):''; msg(`預約成功${memberNo}｜${r.date} ${r.startTime}`,'ok');
       state.course=null; state.time=''; $('slotCard').classList.add('hidden'); $('contactCard').classList.add('hidden'); $('confirmCard').classList.add('hidden'); $('noteInput').value='';
       await loadCourses();
       window.scrollTo({top:0,behavior:'smooth'});
@@ -272,11 +243,7 @@
     if (!booking) loadMine();
   }
 
-  $('dateInput').addEventListener('change', () => {
-    clearTimeout(dateTimer);
-    dateTimer = setTimeout(loadCourses, 250);
-  });
-  $('saveProfileBtn').addEventListener('click', saveProfile);
+  $('dateInput').addEventListener('change', loadCourses);
   $('bookBtn').addEventListener('click', createBooking);
   $('tabBook').addEventListener('click', () => switchTab('book'));
   $('tabMine').addEventListener('click', () => switchTab('mine'));
