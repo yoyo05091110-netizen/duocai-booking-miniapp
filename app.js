@@ -30,9 +30,24 @@
     const key = action + '|' + JSON.stringify(payload || {});
     if (inflight.has(key)) return inflight.get(key);
     const promise = (async () => {
+      const startedAt=Date.now();
+      let slowTimer=null;
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
+      const TIMEOUTS={
+      'mini.bootstrap':20000,
+      'mini.courses':20000,
+      'mini.slots':30000,
+      'mini.createBooking':35000,
+      'mini.myBookings':30000,
+      'mini.cancelBooking':30000
+    };
+      const timeoutMs=TIMEOUTS[action]||25000;
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
+        slowTimer=setTimeout(()=>{
+          if(action==='mini.slots') msg('正在確認老師與可預約時段，請稍候…');
+          else if(action==='mini.myBookings') msg('正在整理您的預約紀錄，請稍候…');
+        },8000);
         const res = await fetch(cfg.API_URL, {
           method:'POST',
           headers:{'Content-Type':'application/json'},
@@ -44,11 +59,12 @@
         try { body = JSON.parse(text || '{}'); } catch (_) { throw new Error('API 回應格式錯誤'); }
         if (!res.ok) throw new Error(body.error || `API 連線失敗（HTTP ${res.status}）`);
         if (!body.ok) throw new Error(body.error || '操作失敗');
+        body.clientElapsedMs=Date.now()-startedAt;
         return body;
       } catch (err) {
         if (err && err.name === 'AbortError') throw new Error('連線逾時，請稍後再試');
         throw err;
-      } finally { clearTimeout(timer); }
+      } finally { clearTimeout(timer); if(slowTimer) clearTimeout(slowTimer); }
     })();
     inflight.set(key, promise);
     try { return await promise; }
