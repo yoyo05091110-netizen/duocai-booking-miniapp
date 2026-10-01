@@ -1,34 +1,15 @@
-# 多采多姿頭皮管理－GitHub Pages MINI App 前端 V1
+# GitHub Pages V2
 
-此版本的目的只有一個：先確認「GitHub Pages + LINE MINI App + LIFF」可以正常取得 LINE ID Token / User ID。
+正式預約前端。LINE 身份由 LIFF 取得，所有 API 經 Cloudflare Worker 轉送到 Apps Script。
 
-## 已預設
-- Developing LIFF ID: `2011797895-i60dUwYm`
-- 不含任何 Channel Secret
-- 不含 INTERNAL_API_KEY
-- 不會真的建立預約
+## 必改
+`config.js` 的 `API_URL` 改成 Worker URL，例如：
 
-## GitHub 建立方式
-1. 建立一個新的 GitHub repository，例如：`duocai-booking-miniapp`
-2. 把本資料夾內的檔案全部上傳到 repository 根目錄。
-3. 到 repository → Settings → Pages。
-4. Build and deployment 選：Deploy from a branch。
-5. Branch 選：`main`，資料夾選：`/(root)`。
-6. 儲存後等待 GitHub Pages 建立 HTTPS 網址。
+```js
+API_URL: 'https://duocai-mini-api.<你的子網域>.workers.dev'
+```
 
-網址通常會是：
-`https://你的GitHub帳號.github.io/duocai-booking-miniapp/`
+LIFF ID 已預設：`2011797895-i60dUwYm`
 
-## LINE MINI App 設定
-到 LINE Developers → MINI App → Web app settings → Developing → Endpoint URL，改成上面的 GitHub Pages URL。
-
-測試入口仍使用 LINE 提供的 Developing MINI App URL，而不是直接使用 GitHub Pages URL：
-`https://miniapp.line.me/2011797895-i60dUwYm`
-
-## 成功判斷
-畫面顯示：
-- LINE 身份取得成功
-- ID Token：已取得
-- LINE User ID：U...（一串 LINE User ID）
-
-如果成功，下一版才會接正式預約 API。
+## GitHub Pages
+把 01_GITHUB_PAGES 內 6 個檔案放在 repository 根目錄，再 Commit。Pages 會自動更新。
