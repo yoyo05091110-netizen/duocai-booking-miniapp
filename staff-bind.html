@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>多采多姿｜員工 LINE 綁定</title>
+  <link rel="stylesheet" href="staff-bind.css?v=3.9">
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="config.js?v=3.9"></script>
+</head>
+<body>
+  <main class="wrap">
+    <section class="brand">
+      <div class="eyebrow">STAFF BINDING</div>
+      <h1>多采多姿頭皮管理－土城店</h1>
+      <p>員工 LINE 身份綁定</p>
+    </section>
+
+    <section class="card">
+      <div id="statusIcon" class="icon">LINE</div>
+      <h2 id="title">正在確認邀請...</h2>
+      <p id="message" class="muted">請稍候，系統正在驗證 LINE 身份與員工邀請。</p>
+
+      <div id="successBox" class="result hidden">
+        <div class="row"><span>StaffID</span><b id="staffId">-</b></div>
+        <div class="row"><span>姓名</span><b id="staffName">-</b></div>
+        <div class="row"><span>角色</span><b id="staffRole">-</b></div>
+      </div>
+
+      <button id="retryBtn" class="primary hidden" type="button">重新綁定</button>
+      <a id="loginBtn" class="primary link hidden" href="https://script.google.com/macros/s/AKfycbyUTmd_Q_7PbSsVZUbzSm7PaLd8t2sbXhu0f9SsgR3V9unA44yXPTHBt3-hGLFIkAepyQ/exec">前往員工登入</a>
+    </section>
+
+    <p class="foot">綁定連結為一次性使用，完成後即失效。</p>
+  </main>
+  <script src="staff-bind.js?v=3.9"></script>
+</body>
+</html>
