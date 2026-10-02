@@ -1,16 +1,33 @@
 (() => {
   'use strict';
+
   const cfg = window.APP_CONFIG || {};
   const $ = id => document.getElementById(id);
+  const TOKEN_KEY = 'duocai_staff_invite_token';
+
   const params = new URLSearchParams(location.search);
-  const inviteToken = String(params.get('token') || '').trim();
+  const tokenFromUrl = String(params.get('token') || '').trim();
+  if (tokenFromUrl) {
+    try { sessionStorage.setItem(TOKEN_KEY, tokenFromUrl); } catch (_) {}
+  }
+  const inviteToken = tokenFromUrl || (() => {
+    try { return String(sessionStorage.getItem(TOKEN_KEY) || '').trim(); }
+    catch (_) { return ''; }
+  })();
 
   function show(type, title, message) {
-    document.body.classList.remove('success','error');
+    document.body.classList.remove('success', 'error');
     if (type) document.body.classList.add(type);
     $('title').textContent = title;
     $('message').textContent = message;
     $('statusIcon').textContent = type === 'success' ? '✓' : (type === 'error' ? '!' : 'LINE');
+  }
+
+  function currentBindUrl() {
+    const url = new URL(location.href);
+    url.search = '';
+    if (inviteToken) url.searchParams.set('token', inviteToken);
+    return url.toString();
   }
 
   async function bind() {
@@ -25,39 +42,51 @@
       if (typeof liff === 'undefined') throw new Error('LIFF SDK 載入失敗');
 
       show('', '正在連接 LINE', '請稍候，系統正在確認您的 LINE 身份。');
-      await liff.init({ liffId:cfg.LIFF_ID, withLoginOnExternalBrowser:true });
+
+      // 不使用 withLoginOnExternalBrowser，避免未登入時被導回 LIFF 預設 Endpoint（預約首頁）。
+      await liff.init({ liffId: cfg.LIFF_ID });
+
       if (!liff.isLoggedIn()) {
-        liff.login({ redirectUri:location.href });
+        liff.login({ redirectUri: currentBindUrl() });
         return;
       }
 
       let idToken = '';
-      for (let i=0;i<4;i++) {
+      for (let i = 0; i < 4; i++) {
         idToken = String(liff.getIDToken() || '').trim();
         if (idToken) break;
-        await new Promise(r => setTimeout(r,300));
+        await new Promise(r => setTimeout(r, 300));
       }
       if (!idToken) throw new Error('LINE 已登入，但沒有取得身份憑證。');
 
       show('', '正在完成員工綁定', 'LINE 身份驗證成功，正在寫入員工帳號。');
+
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 30000);
       let res;
       try {
         res = await fetch(cfg.API_URL, {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({action:'staff.bind',idToken,payload:{inviteToken}}),
-          signal:controller.signal
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'staff.bind',
+            idToken,
+            payload: { inviteToken }
+          }),
+          signal: controller.signal
         });
-      } finally { clearTimeout(timer); }
+      } finally {
+        clearTimeout(timer);
+      }
 
       const text = await res.text();
       let data = {};
       try { data = JSON.parse(text || '{}'); }
       catch (_) { throw new Error('伺服器回應格式錯誤'); }
+
       if (!res.ok || !data.ok) throw new Error(data.error || '員工綁定失敗');
 
+      try { sessionStorage.removeItem(TOKEN_KEY); } catch (_) {}
       $('staffId').textContent = data.staffId || '-';
       $('staffName').textContent = data.name || '-';
       $('staffRole').textContent = data.role || '-';
@@ -65,7 +94,9 @@
       $('loginBtn').classList.remove('hidden');
       show('success', 'LINE 綁定完成', '員工帳號已啟用。之後請由正式員工登入入口進入店內管理系統。');
     } catch (err) {
-      const message = err && err.name === 'AbortError' ? '連線逾時，請稍後重新嘗試。' : String(err && err.message ? err.message : err);
+      const message = err && err.name === 'AbortError'
+        ? '連線逾時，請稍後重新嘗試。'
+        : String(err && err.message ? err.message : err);
       show('error', '綁定未完成', message);
       $('retryBtn').classList.remove('hidden');
     }
